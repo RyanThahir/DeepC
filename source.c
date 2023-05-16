@@ -3,6 +3,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
+#include <omp.h>
 
 void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale);
 void imfilter(double *img, double *kernel, double *img_fltr, int rows, int cols, int padsize);
@@ -23,8 +25,13 @@ int main(int argc, char *argv[])
 	//Upsampler parameters
 	int scale = 2;
 
+	//Input jumlah frame yang akan diinterpolasikan
+	int num;
+	printf("Masukkan jumlah total frame video yang akan diupscale : ");
+	scanf("%d",&num);
+
 	//Compressed Assault Cube
-	int num = 300; //Number of frames to interpolate
+
 	int inCols = 176; //Width of input (downsampled) video
 	int inRows = 144; //Height of input (downsampled) video
 
@@ -50,7 +57,12 @@ int main(int argc, char *argv[])
 	// To work with each pixel in the range of 0~1
 	double *inBuf_tmp = (double *)malloc(inCols*inRows*sizeof(double));
 	double *outBuf_tmp = (double *)malloc(outCols*outRows*sizeof(double));
-
+	//things that are used to measure cpu and wall time
+	//cpu time
+	clock_t begin = clock();
+	//wall time
+	time_t start, ending;
+    time(&start);
 	for (int fcnt = 0; fcnt < num; fcnt++)
 	{
 		//////// Interpolate each frame using FSRCNN for Y component and simple repitition for U and V components
@@ -133,6 +145,17 @@ int main(int argc, char *argv[])
 		fwrite(outBuf, sizeof(unsigned char), outCols*outRows / 4, outFp);
 		
 	}
+	//get cpu time end
+	clock_t end = clock();
+	//get wall time end
+	time(&ending);
+    
+	// calculate cpu and wall time
+	double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+	time_t wall_time = ending - start;
+	//print out cpu and wall time
+	printf("CPU time spent to upscale the video is %lf seconds", time_spent);
+	printf("\nWall time spent to upscale the video is %f seconds\n", wall_time);
 	free(inBuf);
 	inBuf = NULL;
 	free(inBuf_tmp);
@@ -690,7 +713,7 @@ void imfilter(double *img, double *kernel, double *img_fltr, int rows, int cols,
 
 	double *img_pad = (double *)malloc(rows_pad * cols_pad * sizeof(double));
 	pad_image(img, img_pad, rows, cols, padsize);
-
+	#pragma omp parallel for private(i,j,cnt,cnt_krnl,k1,k2,sum,cnt_pad)
 	for (i = padsize; i < rows_pad - padsize; i++)
 	for (j = padsize; j < cols_pad - padsize; j++)
 	{
@@ -717,16 +740,19 @@ void pad_image(double *img, double *img_pad, int rows, int cols, int padsize)
 	int cols_pad = cols + 2 * padsize;
 	int rows_pad = rows + 2 * padsize;
 	int i, j, k, cnt, cnt_pad, k1, k2;
+	double x;
 	// Centeral pixels
+	#pragma omp parallel for private(j, cnt_pad, cnt, x) shared(i)
 	for (i = padsize; i < rows_pad - padsize; i++)
 	for (j = padsize; j < cols_pad - padsize; j++)
 	{
 		cnt_pad = i * cols_pad + j;
 		cnt = (i - padsize)*(cols) + j - padsize;
-		double x = *(img + cnt);
+		x = *(img + cnt);
 		*(img_pad + cnt_pad) = x;
 	}
 	// Top and Bottom Rows
+	//#pragma omp parallel for private(k, cnt_pad, cnt) shared(j)
 	for (j = padsize; j < cols_pad - padsize; j++)
 	for (k = 0; k < padsize; k++)
 	{
@@ -740,9 +766,10 @@ void pad_image(double *img, double *img_pad, int rows, int cols, int padsize)
 		*(img_pad + cnt_pad) = *(img + cnt);
 	}
 	// Left and Right Columns
+	//#pragma omp parallel for private(k, cnt_pad, cnt) shared(i)
 	for (i = padsize; i < rows_pad - padsize; i++)
 	for (k = 0; k < padsize; k++)
-	{
+	{ 
 		// Left Columns
 		cnt = (i - padsize)*cols;
 		cnt_pad = i*cols_pad + k;
@@ -753,6 +780,7 @@ void pad_image(double *img, double *img_pad, int rows, int cols, int padsize)
 		*(img_pad + cnt_pad) = *(img + cnt);
 	}
 	// Corner Pixels
+	//#pragma omp parallel for private(k2, cnt_pad) shared(k1)
 	for (k1 = 0; k1 < padsize; k1++)
 	for (k2 = 0; k2 < padsize; k2++)
 	{
@@ -773,7 +801,8 @@ void pad_image(double *img, double *img_pad, int rows, int cols, int padsize)
 
 void PReLU(double *img_fltr,int rows, int cols, double bias, double prelu_coeff)
 {
-	int cnt = 0;
+	int cnt;
+	#pragma omp parallel for simd collapse(2) private(cnt)
 	for (int i = 0; i < rows;i++)
 	for (int j = 0; j < cols; j++)
 	{
@@ -802,6 +831,7 @@ void imadd(double *img_fltr_sum, double *img_fltr_crnt, int cols, int rows)
 	// *img_fltr_sum ==> pointer to the cumulutive feature map
 
 	int cnt = 0;
+	#pragma omp parallel for simd collapse(2) private(cnt)
 	for (int i = 0; i < rows;i++)
 	for (int j = 0; j < cols; j++)
 	{
@@ -826,7 +856,9 @@ void deconv(double *img_input, double *img_output, double *kernel, int cols, int
 	double *kernel_modif = (double *)malloc(fsize * fsize * sizeof(double));
 
 	int idx, idy;
-	for (int i = 0; i < rows_pad; i++)
+	//nested loop bermasalah
+	//#pragma omp parallel for collapse(2)
+	for (int i = 0; i < rows_pad; i++){
 	for (int j = 0; j < cols_pad; j++)
 	{
 		int cnt_img = i*cols_pad + j;
@@ -841,16 +873,16 @@ void deconv(double *img_input, double *img_output, double *kernel, int cols, int
 			cnt_kernel = k_r*fsize + k_c;
 			*(kernel_modif + cnt_kernel) = (*(kernel + cnt_kernel))*(*(img_input_padded + cnt_img));
 			*(img_output_tmp + cnt_img_output + k_c) = *(img_output_tmp + cnt_img_output + k_c) + *(kernel_modif + cnt_kernel);
-			
 		}
 		cnt_img_output = cnt_img_output + (cols_out_pad + fsize - 1);
+	
 	    }
-		
+	}
 	}
 
 	int rows_out = rows*stride;
 	int cols_out = cols*stride;
-
+	#pragma omp parallel for simd collapse(2)
 	for (int i = 0; i < rows_out; i++)
 	for (int j = 0; j < cols_out; j++)
 	{
@@ -870,7 +902,6 @@ void deconv(double *img_input, double *img_output, double *kernel, int cols, int
 void double_2_uint8(double *double_img, unsigned char *uint8_img, int cols, int rows)
 {
 	int i, j, cnt, k;
-
 	for (i = 0; i < rows;i++)
 	for (j = 0; j < cols; j++)
 	{
