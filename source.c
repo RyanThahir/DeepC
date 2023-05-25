@@ -22,6 +22,7 @@ int main(int argc, char *argv[])
 	char *inFile = argv[1];
 	char *outFile = argv[2];
 
+
 	//Upsampler parameters
 	int scale = 2;
 
@@ -63,6 +64,7 @@ int main(int argc, char *argv[])
 	//wall time
 	time_t start, ending;
     time(&start);
+	//#pragma omp parallel for
 	for (int fcnt = 0; fcnt < num; fcnt++)
 	{
 		//////// Interpolate each frame using FSRCNN for Y component and simple repitition for U and V components
@@ -76,7 +78,7 @@ int main(int argc, char *argv[])
 		//Y Component
 		fread(inBuf, sizeof(unsigned char), inCols*inRows, inFp);
 		int i, j;
-
+		// #pragma omp parallel for
 		for (i = 0; i<inRows; i++)
 		for (j = 0; j<inCols; j++)
 		{
@@ -84,7 +86,16 @@ int main(int argc, char *argv[])
 			int x = *inP++;
 			*(inP_tmp + cnt) = (double)(x / 255.0);
 		}
-
+		// #pragma omp parallel for collapse(2)
+    	// for (i = 0; i < inRows; i++)
+    	// {
+        // 	for (j = 0; j < inCols; j++)
+        // 	{
+        //     	int cnt = i * inCols + j;
+        //    	 	int x = *inP++;
+        //     	*(inP_tmp + cnt) = (double)(x / 255.0);
+        // 	}
+    	// }
 		FSRCNN(outP_tmp, inP_tmp, inRows, inCols, scale);
 
 		outP_tmp = outBuf_tmp;
@@ -209,21 +220,24 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	int cnt_weight = 0;
 	
 	double bias_tmp;
-
+	// #pragma omp parallel for firstprivate(img_fltr_p1,bias_tmp)
 	for (int i = 0; i < num_filters; i++)
 	{
 		// reading corresponding weights to kernel pointer
-		for (int cnt_kernel = 0; cnt_kernel < filtersize; cnt_kernel++)
-		{
-			*(kernel + cnt_kernel) = weights_layer1[cnt_weight + cnt_kernel];
-		}
-		cnt_weight = cnt_weight + filtersize;
-		imfilter(img_lr, kernel, img_fltr_p1, rows, cols, padsize);
 
+		// for (int cnt_kernel = 0; cnt_kernel < filtersize; cnt_kernel++)
+		// {
+		// 	*(kernel + cnt_kernel) = weights_layer1[cnt_weight + cnt_kernel];
+		// }
+		// cnt_weight = cnt_weight + filtersize;
+		
+		imfilter(img_lr, weights_layer1+i*filtersize, img_fltr_p1+i*cols*rows, rows, cols, padsize);
+		
 		bias_tmp = biases_layer1[i];
-		PReLU(img_fltr_p1, rows, cols, bias_tmp, prelu_coeff_layer1);
-
-		img_fltr_p1 = img_fltr_p1 + cols*rows;
+		
+		PReLU( img_fltr_p1+i*cols*rows, rows, cols, bias_tmp, prelu_coeff_layer1);
+		
+		// img_fltr_p1 = img_fltr_p1 + cols*rows;
 	}
 
 	/////////// Convolution2 ------------------- Layer 2~7
@@ -256,6 +270,7 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	int padsize2 = (patchsize2 - 1) / 2;
 	int num_filters2 = 12;
 	int num_channels2 = 56;
+	
 	double prelu_coeff_layer2 = 0.3236;
 	// Convolution
 	double *img_fltr_2 = (double *)calloc(rows * cols * num_filters2 , sizeof(double)); // use calloc to initialize all variables to zero
@@ -265,14 +280,16 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	
 
 	cnt_weight = 0;
+	int i,j,cnt_kernel;
 
-	for (int i = 0; i < num_filters2; i++)
+	for (i = 0; i < num_filters2; i++)
 	{
 		img_fltr_p1 = img_fltr_1; // Return pointer to the first of array which contains feature map of previous layer
-		for (int j = 0; j < num_channels2; j++)
+		
+		for (j = 0; j < num_channels2; j++)
 		{
 			// reading corresponding weights to kernel
-			for (int cnt_kernel = 0; cnt_kernel < filtersize2; cnt_kernel++)
+			for (cnt_kernel = 0; cnt_kernel < filtersize2; cnt_kernel++)
 			{
 				*(kernel2 + cnt_kernel) = weights_layer2[cnt_weight + cnt_kernel];
 			}
@@ -612,6 +629,7 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 			imadd(img_fltr_p7, img_fltr_7_tmp, cols, rows);
 
 			cnt_weight = cnt_weight + filtersize7;
+
 			img_fltr_p6 = img_fltr_p6 + rows*cols;
 		}
 		bias_tmp = biases_layer7[i];
@@ -654,22 +672,24 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	
 	cnt_weight = 0;
 	img_fltr_p7 = img_fltr_7;
-
+	// private(cnt_weight,img_fltr_p7)
+	// #pragma omp parallel for lastprivate(img_fltr_p7)
 	for (int j = 0; j < num_channels8; j++)
 	{
 		// reading corresponding weights to kernel
-		for (int cnt_kernel = 0; cnt_kernel < filtersize8; cnt_kernel++)
-		{
-			*(kernel8 + cnt_kernel) = weights_layer8[cnt_weight + cnt_kernel];
-		}
-		cnt_weight = cnt_weight + filtersize8;
+		// for (int cnt_kernel = 0; cnt_kernel < filtersize8; cnt_kernel++)
+		// {
+		// 	*(kernel8 + cnt_kernel) = weights_layer8[ cnt_weight+ cnt_kernel];
+		// }
+		// cnt_weight = cnt_weight + filtersize8;
 
-		deconv(img_fltr_p7, img_fltr_8_tmp, kernel8, cols, rows, scale);
+		deconv(img_fltr_p7+j*cols*rows, img_fltr_8_tmp, weights_layer8+j*filtersize8, cols, rows, scale);
 
 		imadd(img_fltr_8, img_fltr_8_tmp, cols*scale, rows*scale);
-		
-		img_fltr_p7 = img_fltr_p7 + rows*cols;
+		// #pragma omp atomic
+		// img_fltr_p7 = img_fltr_p7 + rows*cols;
 	}
+	
 
 
 	for (int i=0;i<rows*scale;i++)
@@ -742,7 +762,7 @@ void pad_image(double *img, double *img_pad, int rows, int cols, int padsize)
 	int i, j, k, cnt, cnt_pad, k1, k2;
 	double x;
 	// Centeral pixels
-	#pragma omp parallel for private(j, cnt_pad, cnt, x) shared(i)
+	//#pragma omp parallel for private(j, cnt_pad, cnt, x) shared(i)
 	for (i = padsize; i < rows_pad - padsize; i++)
 	for (j = padsize; j < cols_pad - padsize; j++)
 	{
@@ -855,17 +875,19 @@ void deconv(double *img_input, double *img_output, double *kernel, int cols, int
 	double *img_output_tmp = (double *)calloc((rows_out_pad + fsize - 1)* (cols_out_pad + fsize - 1), sizeof(double));
 	double *kernel_modif = (double *)malloc(fsize * fsize * sizeof(double));
 
-	int idx, idy;
+	int idx, idy,cnt_img,cnt_img_output;
+	int cnt_kernel =0;
 	//nested loop bermasalah
-	//#pragma omp parallel for collapse(2)
+	#pragma omp parallel for collapse(2) firstprivate(idx,idy,cnt_img,cnt_kernel,cnt_img_output) shared(fsize,cols_out_pad,cols_pad,img_input_padded)
 	for (int i = 0; i < rows_pad; i++){
 	for (int j = 0; j < cols_pad; j++)
 	{
-		int cnt_img = i*cols_pad + j;
+		cnt_img = i*cols_pad + j;
 		idx = i*stride;
 		idy = j*stride;
-		int cnt_img_output = idx*(cols_out_pad + fsize - 1) + idy; // (idx,idy) coordinate in temporal output image
-		int cnt_kernel = 0;
+		cnt_img_output = idx*(cols_out_pad + fsize - 1) + idy; // (idx,idy) coordinate in temporal output image
+		cnt_kernel=0;
+		//#pragma omp parallel for
 		for (int k_r = 0; k_r < fsize; k_r++)
 		{
 		for (int k_c = 0; k_c < fsize; k_c++)
@@ -874,6 +896,7 @@ void deconv(double *img_input, double *img_output, double *kernel, int cols, int
 			*(kernel_modif + cnt_kernel) = (*(kernel + cnt_kernel))*(*(img_input_padded + cnt_img));
 			*(img_output_tmp + cnt_img_output + k_c) = *(img_output_tmp + cnt_img_output + k_c) + *(kernel_modif + cnt_kernel);
 		}
+		// #pragma omp critical
 		cnt_img_output = cnt_img_output + (cols_out_pad + fsize - 1);
 	
 	    }
@@ -882,7 +905,9 @@ void deconv(double *img_input, double *img_output, double *kernel, int cols, int
 
 	int rows_out = rows*stride;
 	int cols_out = cols*stride;
-	#pragma omp parallel for simd collapse(2)
+	// int i_tmp,j_tmp,cnt_img_out,cnt_img_out_tmp;
+	// private(i_tmp,j_tmp,cnt_img_out,cnt_img_out_tmp)
+	// #pragma omp parallel for simd collapse(2) 
 	for (int i = 0; i < rows_out; i++)
 	for (int j = 0; j < cols_out; j++)
 	{
