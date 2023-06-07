@@ -220,7 +220,7 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	int cnt_weight = 0;
 	
 	double bias_tmp;
-	// #pragma omp parallel for firstprivate(img_fltr_p1,bias_tmp)
+	#pragma omp parallel for firstprivate(img_fltr_p1,bias_tmp)
 	for (int i = 0; i < num_filters; i++)
 	{
 		// reading corresponding weights to kernel pointer
@@ -282,27 +282,42 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	cnt_weight = 0;
 	int i,j,cnt_kernel;
 
-	for (i = 0; i < num_filters2; i++)
+	#pragma omp parallel for firstprivate(img_fltr_1,img_fltr_p2,bias_tmp,img_fltr_2_tmp)
+	for (int k = 0; k < num_filters2 * num_channels2; k++)
 	{
-		img_fltr_p1 = img_fltr_1; // Return pointer to the first of array which contains feature map of previous layer
-		
-		for (j = 0; j < num_channels2; j++)
+    	int i = k / num_channels2;
+    	int j = k % num_channels2;
+    
+    // reading corresponding weights to kernel
+    // for (int cnt_kernel = 0; cnt_kernel < filtersize2; cnt_kernel++)
+    // {
+    //     *(kernel2 + cnt_kernel) = weights_layer2[cnt_weight + cnt_kernel];
+    //     // printf("%d %d\n",i*num_channels2+j,cnt_weight + cnt_kernel);
+    // }
+    // double weights_layer2[i*num_channels2+j]=;
+	// #pragma omp critical
+		// #pragma omp atomic
+		#pragma omp critical
 		{
-			// reading corresponding weights to kernel
-			for (cnt_kernel = 0; cnt_kernel < filtersize2; cnt_kernel++)
-			{
-				*(kernel2 + cnt_kernel) = weights_layer2[cnt_weight + cnt_kernel];
-			}
-
-			imfilter(img_fltr_p1, kernel2, img_fltr_2_tmp, rows, cols, padsize2);
-			imadd(img_fltr_p2, img_fltr_2_tmp, cols, rows);
-
-			cnt_weight = cnt_weight + filtersize2;
-			img_fltr_p1 = img_fltr_p1 + rows*cols;
+    	imfilter(img_fltr_1+j*cols*rows, weights_layer2+i*num_channels2+j, img_fltr_2_tmp, rows, cols, padsize2);
 		}
-		bias_tmp = biases_layer2[i];
-		PReLU(img_fltr_p2, rows, cols, bias_tmp, prelu_coeff_layer2);
-		img_fltr_p2 = img_fltr_p2 + rows*cols;
+    	// printf("img_fltr_2_tmp\t\t: %.4f\n",*img_fltr_2_tmp);
+		// #pragma omp atomic
+		
+    	imadd(img_fltr_p2+i*cols*rows, img_fltr_2_tmp, cols, rows);
+		
+		// printf("img_fltr_p2+i*cols*rows\t: %.4f\n",*img_fltr_p2+i*cols*rows);
+    
+    // cnt_weight = cnt_weight + filtersize2;
+    // img_fltr_p1 = img_fltr_p1 + rows*cols;
+    
+   		bias_tmp = biases_layer2[i];
+		if(j==num_channels2-1){
+			
+    	PReLU(img_fltr_p2+i*cols*rows, rows, cols, bias_tmp, prelu_coeff_layer2);
+		// printf("prelu img_fltr_p2+i*cols*rows\t: %.4f\n",*img_fltr_p2+i*cols*rows);
+		}
+    // img_fltr_p2 = img_fltr_p2 + rows*cols;
 	}
 
 	free(img_fltr_1);
