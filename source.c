@@ -350,27 +350,28 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	double *img_fltr_3_tmp = (double *)malloc(rows * cols * sizeof(double));
 
 	cnt_weight = 0;
-	
+	img_fltr_p2 = img_fltr_2; 
+	#pragma omp parallel for schedule(static,num_channels3) firstprivate(img_fltr_p2,bias_tmp) shared(rows,img_fltr_3_tmp,cols,padsize3,prelu_coeff_layer3,biases_layer3)
 	for (int i = 0; i < num_filters3; i++)
 	{
-		img_fltr_p2 = img_fltr_2; // Return pointer to the first cell of array which contains feature maps of previous layer
 		for (int j = 0; j < num_channels3; j++)
 		{
 			// reading corresponding weights to kernel
-			for (int cnt_kernel = 0; cnt_kernel < filtersize3; cnt_kernel++)
-			{
-				*(kernel3 + cnt_kernel) = weights_layer3[cnt_weight + cnt_kernel];
-			}
+			// for (int cnt_kernel = 0; cnt_kernel < filtersize3; cnt_kernel++)
+			// {
+			// 	*(kernel3 + cnt_kernel) = weights_layer3[cnt_weight + cnt_kernel];
+			// 	// printf("index : %d\ttesting: %d\n",cnt_weight + cnt_kernel,i*num_channels3+j+filtersize3);
+			// }
 
-			imfilter(img_fltr_p2, kernel3, img_fltr_3_tmp, rows, cols, padsize3);
-			imadd(img_fltr_p3, img_fltr_3_tmp, cols, rows);
+			imfilter(img_fltr_p2+j*cols*rows, weights_layer3+(i*num_channels3+j)*filtersize3 , img_fltr_3_tmp, rows, cols, padsize3);
+			imadd(img_fltr_p3+i*cols*rows, img_fltr_3_tmp, cols, rows);
 
-			cnt_weight = cnt_weight + filtersize3;
-			img_fltr_p2 = img_fltr_p2 + rows*cols;
+			// cnt_weight = cnt_weight + filtersize3;
+			// img_fltr_p2 = img_fltr_p2 + rows*cols;
 		}
 		bias_tmp = biases_layer3[i];
-		PReLU(img_fltr_p3, rows, cols, bias_tmp, prelu_coeff_layer3);
-		img_fltr_p3 = img_fltr_p3 + rows*cols;
+		PReLU(img_fltr_p3+i*cols*rows, rows, cols, bias_tmp, prelu_coeff_layer3);
+		// img_fltr_p3 = img_fltr_p3 + rows*cols;
 	}
 
 	free(img_fltr_2);
@@ -417,27 +418,28 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	double *img_fltr_4_tmp = (double *)malloc(rows * cols * sizeof(double));
 
 	cnt_weight = 0;
-
+	img_fltr_p3 = img_fltr_3; 
+	#pragma omp parallel for schedule(static,num_channels4) firstprivate(img_fltr_p3,bias_tmp) shared(rows,img_fltr_4_tmp,cols,padsize4,prelu_coeff_layer4,biases_layer4)
 	for (int i = 0; i < num_filters4; i++)
 	{
-		img_fltr_p3 = img_fltr_3; 
+		
 		for (int j = 0; j < num_channels4; j++)
 		{
 			// reading corresponding weights to kernel
-			for (int cnt_kernel = 0; cnt_kernel < filtersize4; cnt_kernel++)
-			{
-				*(kernel4 + cnt_kernel) = weights_layer4[cnt_weight + cnt_kernel];
-			}
+			// for (int cnt_kernel = 0; cnt_kernel < filtersize4; cnt_kernel++)
+			// {
+			// 	*(kernel4 + cnt_kernel) = weights_layer4[cnt_weight + cnt_kernel];
+			// }
 
-			imfilter(img_fltr_p3, kernel4, img_fltr_4_tmp, rows, cols, padsize4);
-			imadd(img_fltr_p4, img_fltr_4_tmp, cols, rows);
+			imfilter(img_fltr_p3+j*cols*rows, weights_layer4+(i*num_channels4+j)*filtersize4, img_fltr_4_tmp, rows, cols, padsize4);
+			imadd(img_fltr_p4+i*cols*rows, img_fltr_4_tmp, cols, rows);
 
-			cnt_weight = cnt_weight + filtersize4;
-			img_fltr_p3 = img_fltr_p3 + rows*cols;
+			// cnt_weight = cnt_weight + filtersize4;
+			// img_fltr_p3 = img_fltr_p3 + rows*cols;
 		}
 		bias_tmp = biases_layer4[i];
-		PReLU(img_fltr_p4, rows, cols, bias_tmp, prelu_coeff_layer4);
-		img_fltr_p4 = img_fltr_p4 + rows*cols;
+		PReLU(img_fltr_p4+i*cols*rows, rows, cols, bias_tmp, prelu_coeff_layer4);
+		// img_fltr_p4 = img_fltr_p4 + rows*cols;
 	}
 
 	free(img_fltr_3);
@@ -485,26 +487,28 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 
 	cnt_weight = 0;
 
+	img_fltr_p4 = img_fltr_4;
+	#pragma omp parallel for schedule(static,num_channels5) firstprivate(img_fltr_p4,bias_tmp) shared(rows,img_fltr_5_tmp,cols,padsize5,prelu_coeff_layer5,biases_layer5)
 	for (int i = 0; i < num_filters5; i++)
 	{
-		img_fltr_p4 = img_fltr_4;
+		
 		for (int j = 0; j < num_channels5; j++)
 		{
 			// reading corresponding weights to kernel
-			for (int cnt_kernel = 0; cnt_kernel < filtersize5; cnt_kernel++)
-			{
-				*(kernel5 + cnt_kernel) = weights_layer5[cnt_weight + cnt_kernel];
-			}
+			// for (int cnt_kernel = 0; cnt_kernel < filtersize5; cnt_kernel++)
+			// {
+			// 	*(kernel5 + cnt_kernel) = weights_layer5[cnt_weight + cnt_kernel];
+			// }
 
-			imfilter(img_fltr_p4, kernel5, img_fltr_5_tmp, rows, cols, padsize5);
-			imadd(img_fltr_p5, img_fltr_5_tmp, cols, rows);
+			imfilter(img_fltr_p4+j*cols*rows, weights_layer5+(i*num_channels5+j)*filtersize5, img_fltr_5_tmp, rows, cols, padsize5);
+			imadd(img_fltr_p5+i*cols*rows, img_fltr_5_tmp, cols, rows);
 
-			cnt_weight = cnt_weight + filtersize5;
-			img_fltr_p4 = img_fltr_p4 + rows*cols;
+			// cnt_weight = cnt_weight + filtersize5;
+			// img_fltr_p4 = img_fltr_p4 + rows*cols;
 		}
 		bias_tmp = biases_layer5[i];
-		PReLU(img_fltr_p5, rows, cols, bias_tmp, prelu_coeff_layer5);
-		img_fltr_p5 = img_fltr_p5 + rows*cols;
+		PReLU(img_fltr_p5+i*cols*rows, rows, cols, bias_tmp, prelu_coeff_layer5);
+		// img_fltr_p5 = img_fltr_p5 + rows*cols;
 	}
 
 	free(img_fltr_4);
@@ -551,27 +555,26 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	double *img_fltr_6_tmp = (double *)malloc(rows * cols * sizeof(double));
 
 	cnt_weight = 0;
-
+	img_fltr_p5 = img_fltr_5;
+	#pragma omp parallel for schedule(static,num_channels6) firstprivate(img_fltr_p5,bias_tmp) shared(rows,img_fltr_6_tmp,cols,padsize6,prelu_coeff_layer6,biases_layer6)
 	for (int i = 0; i < num_filters6; i++)
 	{
-		img_fltr_p5 = img_fltr_5;
+		
 		for (int j = 0; j < num_channels6; j++)
 		{
 			// reading corresponding weights to kernel
-			for (int cnt_kernel = 0; cnt_kernel < filtersize6; cnt_kernel++)
-			{
-				*(kernel6 + cnt_kernel) = weights_layer6[cnt_weight + cnt_kernel];
-			}
-
-			imfilter(img_fltr_p5, kernel6, img_fltr_6_tmp, rows, cols, padsize6);
-			imadd(img_fltr_p6, img_fltr_6_tmp, cols, rows);
-
-			cnt_weight = cnt_weight + filtersize6;
-			img_fltr_p5 = img_fltr_p5 + rows*cols;
+			// for (int cnt_kernel = 0; cnt_kernel < filtersize6; cnt_kernel++)
+			// {
+			// 	*(kernel6 + cnt_kernel) = weights_layer6[cnt_weight + cnt_kernel];
+			// }
+			imfilter(img_fltr_p5+j*cols*rows, weights_layer6+(i*num_channels6+j)*filtersize6, img_fltr_6_tmp, rows, cols, padsize6);
+			imadd(img_fltr_p6+i*cols*rows, img_fltr_6_tmp, cols, rows);
+			// cnt_weight = cnt_weight + filtersize6;
+			// img_fltr_p5 = img_fltr_p5 + rows*cols;
 		}
 		bias_tmp = biases_layer6[i];
-		PReLU(img_fltr_p6, rows, cols, bias_tmp, prelu_coeff_layer6);
-		img_fltr_p6 = img_fltr_p6 + rows*cols;
+		PReLU(img_fltr_p6+i*cols*rows, rows, cols, bias_tmp, prelu_coeff_layer6);
+		// img_fltr_p6 = img_fltr_p6 + rows*cols;
 	}
 
 	free(img_fltr_5);
@@ -616,28 +619,29 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	double *img_fltr_7_tmp = (double *)malloc(rows * cols * sizeof(double));
 
 	cnt_weight = 0;
-
+	img_fltr_p6 = img_fltr_6;
+	#pragma omp parallel for schedule(static,num_channels7) firstprivate(img_fltr_p6,bias_tmp) shared(rows,img_fltr_7_tmp,cols,padsize7,prelu_coeff_layer7,biases_layer7)
 	for (int i = 0; i < num_filters7; i++)
 	{
-		img_fltr_p6 = img_fltr_6;
+		
 		for (int j = 0; j < num_channels7; j++)
 		{
 			// reading corresponding weights to kernel
-			for (int cnt_kernel = 0; cnt_kernel < filtersize7; cnt_kernel++)
-			{
-				*(kernel7 + cnt_kernel) = weights_layer7[cnt_weight + cnt_kernel];
-			}
+			// for (int cnt_kernel = 0; cnt_kernel < filtersize7; cnt_kernel++)
+			// {
+			// 	*(kernel7 + cnt_kernel) = weights_layer7[cnt_weight + cnt_kernel];
+			// }
 
-			imfilter(img_fltr_p6, kernel7, img_fltr_7_tmp, rows, cols, padsize7);
-			imadd(img_fltr_p7, img_fltr_7_tmp, cols, rows);
+			imfilter(img_fltr_p6+j*cols*rows, weights_layer7+(i*num_channels7+j)*filtersize7, img_fltr_7_tmp, rows, cols, padsize7);
+			imadd(img_fltr_p7+i*cols*rows, img_fltr_7_tmp, cols, rows);
 
-			cnt_weight = cnt_weight + filtersize7;
+			// cnt_weight = cnt_weight + filtersize7;
 
-			img_fltr_p6 = img_fltr_p6 + rows*cols;
+			// img_fltr_p6 = img_fltr_p6 + rows*cols;
 		}
 		bias_tmp = biases_layer7[i];
-		PReLU(img_fltr_p7, rows, cols, bias_tmp, prelu_coeff_layer7);
-		img_fltr_p7 = img_fltr_p7 + rows*cols;
+		PReLU(img_fltr_p7+i*cols*rows, rows, cols, bias_tmp, prelu_coeff_layer7);
+		// img_fltr_p7 = img_fltr_p7 + rows*cols;
 	}
 
 	free(img_fltr_6);
@@ -679,22 +683,16 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 	// #pragma omp parallel for lastprivate(img_fltr_p7)
 	for (int j = 0; j < num_channels8; j++)
 	{
-		// reading corresponding weights to kernel
-		// for (int cnt_kernel = 0; cnt_kernel < filtersize8; cnt_kernel++)
-		// {
-		// 	*(kernel8 + cnt_kernel) = weights_layer8[ cnt_weight+ cnt_kernel];
-		// }
-		// cnt_weight = cnt_weight + filtersize8;
+
 
 		deconv(img_fltr_p7+j*cols*rows, img_fltr_8_tmp, weights_layer8+j*filtersize8, cols, rows, scale);
 
 		imadd(img_fltr_8, img_fltr_8_tmp, cols*scale, rows*scale);
-		// #pragma omp atomic
-		// img_fltr_p7 = img_fltr_p7 + rows*cols;
+
 	}
 	
 
-
+	// #pragma omp parallel for
 	for (int i=0;i<rows*scale;i++)
 	for (int j = 0;j<cols*scale; j++)
 	{
@@ -910,7 +908,7 @@ void deconv(double *img_input, double *img_output, double *kernel, int cols, int
 	int cols_out = cols*stride;
 	// int i_tmp,j_tmp,cnt_img_out,cnt_img_out_tmp;
 	// private(i_tmp,j_tmp,cnt_img_out,cnt_img_out_tmp)
-	// #pragma omp parallel for simd collapse(2) 
+	#pragma omp parallel for simd collapse(2) 
 	for (int i = 0; i < rows_out; i++)
 	for (int j = 0; j < cols_out; j++)
 	{
