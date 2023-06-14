@@ -620,7 +620,7 @@ void FSRCNN(double *img_hr, double *img_lr, int rows, int cols, int scale)
 
 	cnt_weight = 0;
 	img_fltr_p6 = img_fltr_6;
-	#pragma omp parallel for schedule(static,num_channels7) firstprivate(img_fltr_p6,bias_tmp) shared(rows,img_fltr_7_tmp,cols,padsize7,prelu_coeff_layer7,biases_layer7)
+	#pragma omp parallel for schedule(static,num_filters7) firstprivate(img_fltr_p6,bias_tmp) shared(rows,img_fltr_7_tmp,cols,padsize7,prelu_coeff_layer7,biases_layer7)
 	for (int i = 0; i < num_filters7; i++)
 	{
 		
